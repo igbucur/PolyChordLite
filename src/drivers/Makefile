@@ -11,7 +11,10 @@ $(DRIVERS_DIR)/polychord_CC_ini.o: polychord_CC_ini.cpp
 $(DRIVERS_DIR)/polychord_fortran.o: polychord_fortran.f90
 	$(FC) $(FFLAGS) -I$(POLYCHORD_DIR) -I$(LIKELIHOOD_DIR)/fortran -c $<
 
+$(DRIVERS_DIR)/polychord_MR.o: polychord_MR.cpp
+	$(CXX) $(CXXLAGS) -I$(POLYCHORD_DIR) -I$(LIKELIHOOD_DIR)/MR -c $<
+
 clean:
 	$(RM) *.o *.mod *.MOD
 
-veryclean:
+veryclean: clean

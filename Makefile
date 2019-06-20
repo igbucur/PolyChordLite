@@ -2,7 +2,7 @@
 EXAMPLES = gaussian pyramidal rastrigin twin_gaussian random_gaussian himmelblau rosenbrock eggbox half_gaussian fitting gaussian_shell gaussian_shells object_detection
 
 # Your likelihood programs
-PROGRAMS = polychord_fortran polychord_CC polychord_CC_ini
+PROGRAMS = polychord_MR polychord_fortran polychord_CC polychord_CC_ini
 
 # Directories
 SRC_DIR = $(PWD)/src
@@ -55,6 +55,8 @@ RM = rm -rf
 # Library flags
 LDFLAGS += -L$(LIB_DIR)
 
+# Additional libraries
+LDLIBS += -lconfig++ -larmadillo -lboost_program_options
 
 # Export all of the necessary variables
 export CC CXX FC LD LDSHARED RM AR 
@@ -78,6 +80,7 @@ $(LIB_DIR)/libchord.a:
 	$(MAKE) -C $(POLYCHORD_DIR) $@
 # shared library
 $(LIB_DIR)/libchord.so:
+	@echo "uname is $(shell uname)"
 	$(MAKE) -C $(POLYCHORD_DIR) $@
 
 pypolychord: $(LIB_DIR)/libchord.so
@@ -89,7 +92,7 @@ pypolychord: $(LIB_DIR)/libchord.so
 # Examples
 # --------
 $(patsubst %,$(BIN_DIR)/%,$(EXAMPLES)): $(BIN_DIR)/%: $(LIB_DIR)/libchord.a $(LIB_DIR)/lib%.a $(DRIVERS_DIR)/polychord_examples.o
-	$(LD) $(DRIVERS_DIR)/polychord_examples.o $(LIB_DIR)/libchord.a -o $@ $(LDFLAGS) $(LDLIBS) -l$*
+	$(LD) $(DRIVERS_DIR)/polychord_examples.o -o $@ $(LDFLAGS) -Wl,-Bstatic -lchord -Wl,-Bdynamic $(LDLIBS) -l$*
 
 $(patsubst %,$(LIB_DIR)/lib%.a,$(EXAMPLES)): $(LIB_DIR)/libchord.a
 	$(MAKE) -C $(EXAMPLES_DIR) $@
@@ -100,7 +103,7 @@ $(DRIVERS_DIR)/polychord_examples.o:
 # User Likelihoods
 # ----------------
 $(patsubst %,$(BIN_DIR)/%,$(PROGRAMS)): $(BIN_DIR)/polychord_% : $(LIB_DIR)/libchord.a $(LIB_DIR)/lib%_likelihood.a $(DRIVERS_DIR)/polychord_%.o 
-	$(LD) $(DRIVERS_DIR)/polychord_$*.o $(LIB_DIR)/libchord.a -o $@ $(LDFLAGS) -l$*_likelihood $(LDLIBS) 
+	$(LD) $(DRIVERS_DIR)/polychord_$*.o  -o $@ $(LDFLAGS) -Wl,-Bstatic -lchord -Wl,-Bdynamic -l$*_likelihood $(LDLIBS) 
 
 $(patsubst polychord_%,$(LIB_DIR)/lib%_likelihood.a,$(PROGRAMS)): $(LIB_DIR)/lib%_likelihood.a: $(LIB_DIR)/libchord.a
 	$(MAKE) -C $(LIKELIHOOD_DIR)/$* $@
