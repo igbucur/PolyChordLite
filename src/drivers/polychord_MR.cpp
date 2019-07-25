@@ -4,16 +4,15 @@
 
 int main(int argc, char *argv[])
 {
-    if (argc > 2) {
-        std::string input_file = argv[1];
-        std::string config_file = argv[2];
+    if (argc == 2) {
+        std::string config_file = argv[1];
 
         set_ini(config_file); // pass config file to likelihood computation
-        run_polychord(loglikelihood,setup_loglikelihood,input_file) ;
+        run_polychord(loglikelihood,setup_loglikelihood, config_file) ;
         return 0;
     }
     else{
-        std::cerr << "polychord_MR should be called with two arguments specifying INI configuration files: the first file contains the algorithm configuration and the second file contains the model configuration" << std::endl;
+        std::cerr << "polychord_MR should be called with exactly one file specifying a INI configuration file, which should be created using the functions provided in the BayesMR package" << std::endl;
         return 1;
     }
 }

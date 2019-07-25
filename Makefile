@@ -56,7 +56,7 @@ RM = rm -rf
 LDFLAGS += -L$(LIB_DIR)
 
 # Additional libraries
-LDLIBS += -lconfig++ -larmadillo -lboost_program_options
+LDLIBS += -larmadillo 
 
 # Export all of the necessary variables
 export CC CXX FC LD LDSHARED RM AR 

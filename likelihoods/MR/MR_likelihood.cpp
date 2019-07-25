@@ -3,11 +3,10 @@
 
 #include <iostream>
 #include <boost/math/distributions/normal.hpp>
-#include <boost/program_options.hpp>
 #include <armadillo>
 using namespace arma;
 
-#include <libconfig.h++>
+#include "../../../inst/simpleini/SimpleIni.h" // For reading INI files
 
 // This module is where your likelihood code should be placed.
 //
@@ -38,20 +37,6 @@ MyConfig config;
 
 // name of file containing model configuration
 std::string model_config_filename;
-
-
-#define l0 -1
-#define l1 1
-#define L 0
-#define LL 1
-#define LT0 1
-#define LT1 2
-#define TT00 2
-#define TT01 3
-#define TT11 6
-#define SAMPLES 100
-#define SLAB 1
-#define SPIKE 100
 
 /* GLOBALS */
 boost::math::normal standard_gaussian(0.0, 1.0);
@@ -285,54 +270,26 @@ void set_ini(std::string ini_str_in)
 void setup_loglikelihood()
 {
 
-  namespace po = boost::program_options;
-  po::options_description options("Options");
-/*
-  std::ifstream ini_stream("ini/MR_dir.ini");
+  CSimpleIniA ini;
+  ini.LoadFile(model_config_filename.c_str());
 
-  std::string config_file;
-
-  options.add_options()
-    ("model settings.config_file", po::value<std::string>(&config_file), "config_file")
-  ;
-
-
-  po::variables_map ini_vm;
-
-  po::store(po::parse_config_file(ini_stream, options, true), ini_vm);
-  po::notify(ini_vm);
-
-  std::cout << "config file name is " << config_file << std::endl;
-*/
-  std::ifstream config_stream(model_config_filename);
-
-  std::string SS_filename, sigmaG_filename;
-
-
-
-  options.add_options()
-    ("model settings.SS_filename", po::value<std::string>(&SS_filename), "SS_filename")
-    ("model settings.sigmaG_filename", po::value<std::string>(&sigmaG_filename), "sigmaG_filename")
-    ("model settings.slab_precision", po::value<double>(&config.slab_precision), "slab_precision")
-    ("model settings.spike_precision", po::value<double>(&config.spike_precision), "spike_precision")
-    ("model settings.instruments", po::value<unsigned>(&config.J), "no_instruments")
-    ("model settings.observations", po::value<unsigned>(&config.N), "no_observations")
-    ("model settings.model", po::value<int>(&config.model), "model")
-  ;
-  po::variables_map vm;
-
-  po::store(po::parse_config_file(config_stream, options, true), vm);
-  po::notify(vm);
-  
-
-  config.SS.load(SS_filename);
-  config.sigma_G.load(sigmaG_filename);
-
+  std::string SS_filename = ini.GetValue("model settings", "SS_filename", "");
+  std::string sigmaG_filename = ini.GetValue("model settings", "sigmaG_filename", "");
+  config.slab_precision = strtod(ini.GetValue("model settings", "slab_precision", ""), NULL); 
+  config.spike_precision = strtod(ini.GetValue("model settings", "spike_precision", ""), NULL); 
+  config.J = strtoul(ini.GetValue("model settings", "instruments", ""), NULL, 0);
+  config.N = strtoul(ini.GetValue("model settings", "observations", ""), NULL, 0);
+  config.model = strtol(ini.GetValue("model settings", "model", ""), NULL, 0);
+ 
   std::cout << "SS filename: " << SS_filename << std::endl;
+  
+  config.SS.load(SS_filename);
   std::cout << "SS matrix: " << std::endl;
   std::cout << config.SS << std::endl;
 
   std::cout << "sigma_G filename: " << sigmaG_filename << std::endl;
+  
+  config.sigma_G.load(sigmaG_filename);
   std::cout << "sigmaG matrix: " << std::endl;
   std::cout << config.sigma_G << std::endl;
 
@@ -346,48 +303,4 @@ void setup_loglikelihood()
   config.spike_gaussian = boost::math::normal(0.0, sqrt(1.0 / config.spike_precision));
   config.slab_gaussian = boost::math::normal(0.0, sqrt(1.0 / config.slab_precision));
 
-/*
-  libconfig::Config cfg;
-
-  cfg.readFile("MR_likelihood.cfg");
-
-  std::string SS_filename = cfg.lookup("SS_filename");
-  std::cout << "SS filename: " << SS_filename << std::endl;
-
-  std::string sigmaG_filename = cfg.lookup("sigmaG_filename");
-  std::cout << "sigmaG filename: " << sigmaG_filename << std::endl;
-
-  double slab_precision = cfg.lookup("slab_precision");
-  std::cout << "Slab precision: " << slab_precision << std::endl;
-
-  double spike_precision = cfg.lookup("spike_precision");
-  std::cout << "Spike precision: " << spike_precision << std::endl;
-
-  unsigned no_instruments = cfg.lookup("instruments");
-  std::cout << "Number of instruments: " << no_instruments << std::endl;
-
-  unsigned no_samples = cfg.lookup("samples");
-  std::cout << "Number of samples: " << no_samples << std::endl;
-
-  unsigned model = cfg.lookup("model");
-  std::cout << "Model: " << model << std::endl;
-
-  config.SS.load(SS_filename);
-  config.sigma_G.load(sigmaG_filename);
-  config.slab_precision = slab_precision;
-  config.spike_precision = spike_precision;
-  config.N = no_samples;
-  config.J = no_instruments;
-  config.model = model;
-  
-  config.spike_gaussian = boost::math::normal(0.0, sqrt(1.0 / spike_precision));
-  config.slab_gaussian = boost::math::normal(0.0, sqrt(1.0 / slab_precision));
-
-
-  std::cout << "SS matrix: " << std::endl;
-  std::cout << config.SS << std::endl;
-
-  std::cout << "sigmaG matrix: " << std::endl;
-  std::cout << config.sigma_G << std::endl;
-*/
 }
