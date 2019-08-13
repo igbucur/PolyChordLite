@@ -112,33 +112,42 @@ double loglikelihood (double theta[], int nDims, double phi[], int nDerived)
   // uniform prior on Gaussian mixture weights (indices 1:2)
   double wgamma = theta[par_no++];
   double walpha = theta[par_no++];
+  
+  // The default model assumes spike-and-slab priors for every structural parameter and pooled weights for the spike-and-slab components
+  if (config.model == 0) {
 
-  // Prior on pleiotropic effects (indices 2:(2J+1))
-  for(int j = 0; j < config.J; ++j) {
-#ifdef W_GAMMA
-    sgamma(j) = quantile_spike_and_slab(theta[par_no++], W_GAMMA, config.slab_gaussian, config.spike_gaussian);
-#else
-    sgamma(j) = quantile_spike_and_slab(theta[par_no++], wgamma, config.slab_gaussian, config.spike_gaussian);
-#endif
+    // Prior on pleiotropic effects (indices 2:(2J+1))
+    for(int j = 0; j < config.J; ++j) {
 
-#ifdef W_ALPHA 
-    salpha(j) = quantile_spike_and_slab(theta[par_no++], W_ALPHA, config.slab_gaussian, config.spike_gaussian);
-#else
-    if(config.model == 0) {
+      sgamma(j) = quantile_spike_and_slab(theta[par_no++], wgamma, config.slab_gaussian, config.spike_gaussian);
       salpha(j) = quantile_spike_and_slab(theta[par_no++], walpha, config.slab_gaussian, config.spike_gaussian);
-    } else if (config.model == 1) {
-      // no pleiotropy
-      salpha(j) = quantile(config.spike_gaussian, theta[par_no++]);
     }
-#endif
+
+    // Prior on causal effect
+    double sbeta = quantile_spike_and_slab(theta[par_no++], 0.5, config.slab_gaussian, config.spike_gaussian);
+
+    // Prior on confounding coefficients
+    double skappa_X = quantile_spike_and_slab(theta[par_no++] / 2 + 0.5, 0.5, config.slab_gaussian, config.spike_gaussian);
+    double skappa_Y = quantile_spike_and_slab(theta[par_no++], 0.5, config.slab_gaussian, config.spike_gaussian);
+
+  // This model corresponds closely to the IV model assumptions (See Figure 18 in SMMR paper)
+  } else if (config.model == 1) {
+
+    // Prior on pleiotropic effects (indices 2:(2J+1))
+    for(int j = 0; j < config.J; ++j) {
+      sgamma(j) = quantile(config.slab_gaussian, theta[par_no++]); // Gaussian prior on instrument strengths
+      salpha(j) = quantile(config.spike_gaussian, theta[par_no++]); // very small (irrelevant) pleiotropy
+    }
+
+    // Prior on causal effect
+    double sbeta = quantile(config.slab_gaussian, theta[par_no++]);
+
+    // Prior on confounding coefficients
+    double skappa_X = quantile(config.slab_gaussian, theta[par_no++] / 2 + 0.5);
+    double skappa_Y = quantile(config.slab_gaussian, theta[par_no++]);
   }
 
-  // Prior on causal effect
-  double sbeta = quantile_spike_and_slab(theta[par_no++], 0.5, config.slab_gaussian, config.spike_gaussian);
 
-  // Prior on confounding coefficients
-  double skappa_X = quantile_spike_and_slab(theta[par_no++] / 2 + 0.5, 0.5, config.slab_gaussian, config.spike_gaussian);
-  double skappa_Y = quantile_spike_and_slab(theta[par_no++], 0.5, config.slab_gaussian, config.spike_gaussian);
 
   // Prior on scale parameters (half-normal)
   double sigma_X = quantile(uninformative_gaussian, theta[par_no++] / 2 + 0.5);
