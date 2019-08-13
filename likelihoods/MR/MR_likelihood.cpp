@@ -6,7 +6,7 @@
 #include <armadillo>
 using namespace arma;
 
-#include "../../../inst/simpleini/SimpleIni.h" // For reading INI files
+#include "../../../simpleini/SimpleIni.h" // For reading INI files
 
 // This module is where your likelihood code should be placed.
 //
@@ -106,7 +106,10 @@ double loglikelihood (double theta[], int nDims, double phi[], int nDerived)
 
   vec salpha(config.J, fill::zeros);
   vec sgamma(config.J, fill::zeros);
-  
+  double sbeta = 0.0;
+  double skappa_X = 0.0;
+  double skappa_Y = 0.0;  
+
   unsigned par_no = 0L;
  
   // uniform prior on Gaussian mixture weights (indices 1:2)
@@ -124,11 +127,11 @@ double loglikelihood (double theta[], int nDims, double phi[], int nDerived)
     }
 
     // Prior on causal effect
-    double sbeta = quantile_spike_and_slab(theta[par_no++], 0.5, config.slab_gaussian, config.spike_gaussian);
+    sbeta = quantile_spike_and_slab(theta[par_no++], 0.5, config.slab_gaussian, config.spike_gaussian);
 
     // Prior on confounding coefficients
-    double skappa_X = quantile_spike_and_slab(theta[par_no++] / 2 + 0.5, 0.5, config.slab_gaussian, config.spike_gaussian);
-    double skappa_Y = quantile_spike_and_slab(theta[par_no++], 0.5, config.slab_gaussian, config.spike_gaussian);
+    skappa_X = quantile_spike_and_slab(theta[par_no++] / 2 + 0.5, 0.5, config.slab_gaussian, config.spike_gaussian);
+    skappa_Y = quantile_spike_and_slab(theta[par_no++], 0.5, config.slab_gaussian, config.spike_gaussian);
 
   // This model corresponds closely to the IV model assumptions (See Figure 18 in SMMR paper)
   } else if (config.model == 1) {
@@ -140,11 +143,11 @@ double loglikelihood (double theta[], int nDims, double phi[], int nDerived)
     }
 
     // Prior on causal effect
-    double sbeta = quantile(config.slab_gaussian, theta[par_no++]);
+    sbeta = quantile(config.slab_gaussian, theta[par_no++]);
 
     // Prior on confounding coefficients
-    double skappa_X = quantile(config.slab_gaussian, theta[par_no++] / 2 + 0.5);
-    double skappa_Y = quantile(config.slab_gaussian, theta[par_no++]);
+    skappa_X = quantile(config.slab_gaussian, theta[par_no++] / 2 + 0.5);
+    skappa_Y = quantile(config.slab_gaussian, theta[par_no++]);
   }
 
 
