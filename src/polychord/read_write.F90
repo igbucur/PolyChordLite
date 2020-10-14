@@ -498,6 +498,9 @@ module read_write_module
         ! Assign the writing format
         write(fmt_dbl,'("(",I0,A,")")') settings%np,DB_FMT 
 
+        ! Sort the indices into order
+        ordering = sort_doubles([-RTI%logZp,-RTI%logZp_dead])
+
         ! ============= Equally weighted posteriors ================
         if(settings%equals) then
             ! ------------- global equally weighted posteriors ----------------
@@ -512,10 +515,6 @@ module read_write_module
 
             ! Close the equally weighted global posterior file
             close(write_equals_unit)
-
-
-            ! Sort the indices into order
-            ordering = sort_doubles([-RTI%logZp,-RTI%logZp_dead])
 
             ! ------------- cluster equally weighted posteriors ----------------
 
@@ -752,6 +751,61 @@ module read_write_module
 
     end subroutine write_prior_file
 
+    subroutine write_max_file(settings,max_point, max_posterior_point, dXdtheta, mean_point)
+        use utils_module, only: DB_FMT,fmt_len,write_max_unit
+        use settings_module, only: program_settings 
+        use run_time_module, only: run_time_info 
+        implicit none
+
+        type(program_settings), intent(in) :: settings
+        real(dp), dimension(settings%nTotal), intent(in) :: max_point, max_posterior_point
+        real(dp), dimension(settings%nTotal), intent(in), optional :: mean_point
+        real(dp), intent(in) :: dXdtheta
+
+        character(len=fmt_len) :: fmt_dbl
+
+        call check_directories(settings)
+
+        ! Initialise the formats
+        write(fmt_dbl,'("(",I0,A,")")') settings%nDims + settings%nDerived + 1,DB_FMT 
+
+        ! Open a new file for appending to
+        open(write_max_unit,file=trim(max_file(settings)), action='write')
+        write(write_max_unit, '("Maximum LogLikelihood:" )')
+        write(fmt_dbl,'("(",I0,A,")")') 1,DB_FMT 
+        write(write_max_unit, fmt_dbl) max_point(settings%l0)
+
+        write(write_max_unit, '("Maximum Likelihood point:" )')
+        write(fmt_dbl,'("(",I0,A,")")') settings%nDims + settings%nDerived,DB_FMT 
+        write(write_max_unit, fmt_dbl) max_point(settings%p0:settings%d1)
+        write(write_max_unit, '("")')
+
+
+        write(write_max_unit, '("Maximum Posterior:" )')
+        write(fmt_dbl,'("(",I0,A,")")') 1,DB_FMT 
+        write(write_max_unit, fmt_dbl) max_posterior_point(settings%l0) + dXdtheta
+        write(write_max_unit, '("Maximum Likelihood at posterior:" )')
+        write(write_max_unit, fmt_dbl) max_posterior_point(settings%l0)
+
+        write(write_max_unit, '("Maximum Posterior point:" )')
+        write(fmt_dbl,'("(",I0,A,")")') settings%nDims + settings%nDerived,DB_FMT 
+        write(write_max_unit, fmt_dbl) max_posterior_point(settings%p0:settings%d1)
+        write(write_max_unit, '("")')
+
+        if (present(mean_point)) then
+            write(write_max_unit, '("LogLikelihood(mean):" )')
+            write(fmt_dbl,'("(",I0,A,")")') 1,DB_FMT 
+            write(write_max_unit, fmt_dbl) mean_point(settings%l0)
+
+            write(write_max_unit, '("mean point:" )')
+            write(fmt_dbl,'("(",I0,A,")")') settings%nDims + settings%nDerived,DB_FMT 
+            write(write_max_unit, fmt_dbl) mean_point(settings%p0:settings%d1)
+        end if
+
+        close(write_max_unit)
+
+    end subroutine write_max_file
+
     subroutine write_stats_file(settings,RTI,nlikesum)
         use utils_module, only: DB_FMT,fmt_len,write_stats_unit,logsubexp
         use settings_module, only: program_settings
@@ -931,8 +985,32 @@ module read_write_module
 
 
         close(paramnames_unit)
+        call write_properties_file(settings)
  
     end subroutine write_paramnames_file
+
+
+    subroutine write_properties_file(settings)
+        use priors_module, only: prior
+        use settings_module,   only: program_settings
+        use utils_module,  only: properties_unit
+        use params_module, only: param_type
+        implicit none
+        
+        type(program_settings),intent(in)                    :: settings       !> Program settings
+
+        integer :: i
+
+        call check_directories(settings)
+
+        open(unit=properties_unit,file=trim(properties_file(settings)))
+
+        write(properties_unit,'("sampler=nested")')
+        write(properties_unit,'("label=",A)') settings%file_root
+
+        close(properties_unit)
+ 
+    end subroutine write_properties_file
 
 
 
@@ -1075,6 +1153,17 @@ module read_write_module
 
     end function prior_file
 
+    function max_file(settings) result(file_name)
+        use settings_module, only: program_settings
+        use utils_module,    only: STR_LENGTH
+        implicit none
+        type(program_settings), intent(in) :: settings
+        character(STR_LENGTH) :: file_name
+
+        file_name = trim(settings%base_dir) // '/' // trim(settings%file_root) // '.maximum'
+
+    end function max_file
+
     function dead_file(settings) result(file_name)
         use settings_module, only: program_settings
         use utils_module,    only: STR_LENGTH
@@ -1108,5 +1197,29 @@ module read_write_module
         file_name = trim(settings%base_dir) // '/' // trim(settings%file_root) // '.paramnames'
 
     end function paramnames_file
+
+    function properties_file(settings) result(file_name)
+        use settings_module, only: program_settings
+        use utils_module,    only: STR_LENGTH
+        implicit none
+        type(program_settings), intent(in) :: settings
+
+        character(STR_LENGTH) :: file_name
+
+        file_name = trim(settings%base_dir) // '/' // trim(settings%file_root) // '.properties.ini'
+
+    end function properties_file
+
+    function prior_info_file(settings) result(file_name)
+        use settings_module, only: program_settings
+        use utils_module,    only: STR_LENGTH
+        implicit none
+        type(program_settings), intent(in) :: settings
+
+        character(STR_LENGTH) :: file_name
+
+        file_name = trim(settings%base_dir) // '/' // trim(settings%file_root) // '.prior_info'
+
+    end function prior_info_file
 
 end module

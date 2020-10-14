@@ -2,7 +2,7 @@
 !! details required to perform a nested sampling run.
 module settings_module
     use utils_module, only: dp
-    use utils_module,   only: STR_LENGTH
+    use utils_module, only: STR_LENGTH
     implicit none
 
     integer, parameter :: live_type    = 1
@@ -55,6 +55,7 @@ module settings_module
         integer :: nfail = -1
         integer :: nprior_repeat = -1
         logical :: write_prior = .false.
+        logical :: maximise = .false.
 
         integer :: seed = -1
 

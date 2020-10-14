@@ -63,7 +63,7 @@ module generate_module
         use random_module,   only: random_reals
         use utils_module,    only: write_phys_unit,DB_FMT,fmt_len,minpos,time
         use calculate_module, only: calculate_point
-        use read_write_module, only: phys_live_file
+        use read_write_module, only: phys_live_file, prior_info_file
         use feedback_module,  only: write_started_generating,write_finished_generating,write_generating_live_points
         use run_time_module,   only: run_time_info,initialise_run_time_info
         use array_module,     only: add_point
@@ -101,8 +101,8 @@ module generate_module
 
         type(mpi_bundle),intent(in) :: mpi_information
 #ifdef MPI
-        integer             :: active_slaves    !  Number of currently working slaves
-        integer             :: slave_id         !  Slave identifier to signal who to throw back to
+        integer             :: active_workers    !  Number of currently working workers
+        integer             :: worker_id         !  Worker identifier to signal who to throw back to
 #endif
 
         real(dp), dimension(settings%nTotal) :: live_point ! Temporary live point array
@@ -111,7 +111,7 @@ module generate_module
         character(len=fmt_len) :: fmt_dbl ! writing format variable
 
         integer :: nlike ! number of likelihood calls
-        integer :: nprior
+        integer :: nprior, ndiscarded
 
         real(dp) :: time0,time1,total_time
         real(dp),dimension(size(settings%grade_dims)) :: speed
@@ -142,6 +142,7 @@ module generate_module
         else
             nprior = settings%nprior
         end if
+        ndiscarded=0
 
         total_time=0
         if(linear_mode(mpi_information)) then
@@ -155,6 +156,7 @@ module generate_module
                 ! Compute physical coordinates, likelihoods and derived parameters
                 time0 = time()
                 call calculate_point( loglikelihood, prior, live_point, settings, nlike)
+                ndiscarded=ndiscarded+1
                 time1 = time()
                 live_point(settings%b0) = settings%logzero
 
@@ -187,12 +189,12 @@ module generate_module
                 ! The root node just recieves data from all other processors
 
 
-                active_slaves=mpi_information%nprocs-1 ! Set the number of active processors to the number of slaves
+                active_workers=mpi_information%nprocs-1 ! Set the number of active processors to the number of workers
 
-                do while(active_slaves>0) 
+                do while(active_workers>0) 
 
-                    ! Recieve a point from any slave
-                    slave_id = catch_point(live_point,mpi_information)
+                    ! Recieve a point from any worker
+                    worker_id = catch_point(live_point,mpi_information)
 
                     ! If its valid, and we need more points, add it to the array
                     if(live_point(settings%l0)>settings%logzero .and. RTI%nlive(1)<nprior) then
@@ -213,10 +215,10 @@ module generate_module
 
 
                     if(RTI%nlive(1)<nprior) then
-                        call request_point(mpi_information,slave_id)  ! If we still need more points, send a signal to have another go
+                        call request_point(mpi_information,worker_id)  ! If we still need more points, send a signal to have another go
                     else
-                        call no_more_points(mpi_information,slave_id) ! Otherwise, send a signal to stop
-                        active_slaves=active_slaves-1                  ! decrease the active slave counter
+                        call no_more_points(mpi_information,worker_id) ! Otherwise, send a signal to stop
+                        active_workers=active_workers-1                ! decrease the active worker counter
                     end if
 
                 end do
@@ -226,12 +228,13 @@ module generate_module
 
             else
 
-                ! The slaves simply generate and send points until they're told to stop by the master
+                ! The workers simply generate and send points until they're told to stop by the administrator
                 do while(.true.)
         
                     live_point(settings%h0:settings%h1) = random_reals(settings%nDims)       ! Generate a random hypercube coordinate
                     time0 = time()
                     call calculate_point( loglikelihood, prior, live_point, settings,nlike) ! Compute physical coordinates, likelihoods and derived parameters
+                    ndiscarded=ndiscarded+1
                     time1 = time()
                     live_point(settings%b0) = settings%logzero
                     if(live_point(settings%l0)>settings%logzero) total_time = total_time + time1-time0
@@ -245,16 +248,26 @@ module generate_module
 
 #ifdef MPI
         nlike = sum_integers(nlike,mpi_information) ! Gather the likelihood calls onto one node
+        ndiscarded = sum_integers(ndiscarded,mpi_information) ! Gather the likelihood calls onto one node
         total_time = sum_doubles(total_time,mpi_information) ! Sum up the total time taken
 #endif
 
 
         ! ----------------------------------------------- !
-        if(is_root(mpi_information)) call write_finished_generating(settings%feedback)  
+        if(is_root(mpi_information)) then
+            call write_finished_generating(settings%feedback)  
+            open(1990,file=trim(prior_info_file(settings)), action='write', position="append" ) 
+            write(1990,'("nprior = ", I12)') nprior
+            write(1990,'("ndiscarded = ", I12)') ndiscarded
+            close(1990)
+        end if
         ! ----------------------------------------------- !
         ! Find the average time taken
         speed(1) = total_time/nprior
-        call time_speeds(loglikelihood,prior,settings,RTI,speed,mpi_information) 
+
+        if (any(settings%grade_frac<=1)) then
+            call time_speeds(loglikelihood,prior,settings,RTI,speed,mpi_information) 
+        end if
 
 
 
@@ -271,8 +284,12 @@ module generate_module
             if(settings%write_live) close(write_phys_unit)
 
             if(.not. allocated(RTI%num_repeats) ) allocate(RTI%num_repeats(size(settings%grade_dims)))
-            RTI%num_repeats(1) = settings%num_repeats
-            RTI%num_repeats(2:) = nint(settings%grade_frac(2:)/(settings%grade_frac(1)+0d0)*RTI%num_repeats(1)*speed(1)/speed(2:))
+            if (any(settings%grade_frac<=1)) then
+                RTI%num_repeats(1) = settings%num_repeats
+                RTI%num_repeats(2:) = nint(settings%grade_frac(2:)/(settings%grade_frac(1)+0d0)*RTI%num_repeats(1)*speed(1)/speed(2:))
+            else
+                RTI%num_repeats = int(settings%grade_frac)
+            end if
 
             ! Set the posterior thinning factor
             if(settings%boost_posterior<0d0) then
@@ -462,8 +479,8 @@ module generate_module
 
         type(mpi_bundle),intent(in) :: mpi_information
 #ifdef MPI
-        integer             :: active_slaves    !  Number of currently working slaves
-        integer             :: slave_id         !  Slave identifier to signal who to throw back to
+        integer             :: active_workers    !  Number of currently working workers
+        integer             :: worker_id         !  Worker identifier to signal who to throw back to
 #endif
 
         real(dp), dimension(settings%nTotal) :: live_point ! Temporary live point array
@@ -513,18 +530,19 @@ module generate_module
         if(linear_mode(mpi_information)) then
             !===================== LINEAR MODE =========================
 
+            live_point = settings%seed_point
             do while(RTI%nlive(1)<nprior)
-                live_point = settings%seed_point
                 do i_repeat = 1,settings%nprior_repeat
-                    i_dim = 1+mod(i_repeat,settings%nDims)
-                    i_grade = grade(i_dim)
-                    nhat = 0d0
-                    nhat(i_dim) = 1d0
+                    do i_dim=1,settings%nDims
+                        i_grade = grade(i_dim)
+                        nhat = 0d0
+                        nhat(i_dim) = 1d0
 
-                    time0 = time()
-                    live_point = slice_sample(loglikelihood,prior,settings%logzero,nhat,live_point,1d0,settings,nlikes(i_grade))
-                    time1 = time()
-                    times(i_grade) = times(i_grade) + time1 - time0
+                        time0 = time()
+                        live_point = slice_sample(loglikelihood,prior,settings%logzero,nhat,live_point,1d0,settings,nlikes(i_grade))
+                        time1 = time()
+                        times(i_grade) = times(i_grade) + time1 - time0
+                    end do
                 end do
 
                 call add_point(live_point,RTI%live,RTI%nlive,1) ! Add this point to the array
@@ -544,12 +562,12 @@ module generate_module
             if(is_root(mpi_information)) then
                 ! The root node just recieves data from all other processors
 
-                active_slaves=mpi_information%nprocs-1 ! Set the number of active processors to the number of slaves
+                active_workers=mpi_information%nprocs-1 ! Set the number of active processors to the number of workers
 
-                do while(active_slaves>0) 
+                do while(active_workers>0) 
 
-                    ! Recieve a point from any slave
-                    slave_id = catch_point(live_point,mpi_information)
+                    ! Recieve a point from any worker
+                    worker_id = catch_point(live_point,mpi_information)
 
                     ! If its valid, and we need more points, add it to the array
                     if(RTI%nlive(1)<nprior) then
@@ -570,10 +588,10 @@ module generate_module
 
 
                     if(RTI%nlive(1)<nprior) then
-                        call request_point(mpi_information,slave_id)  ! If we still need more points, send a signal to have another go
+                        call request_point(mpi_information,worker_id)  ! If we still need more points, send a signal to have another go
                     else
-                        call no_more_points(mpi_information,slave_id) ! Otherwise, send a signal to stop
-                        active_slaves=active_slaves-1                  ! decrease the active slave counter
+                        call no_more_points(mpi_information,worker_id) ! Otherwise, send a signal to stop
+                        active_workers=active_workers-1                ! decrease the active worker counter
                     end if
 
                 end do
@@ -583,10 +601,10 @@ module generate_module
 
             else
 
-                ! The slaves simply generate and send points until they're told to stop by the master
+                ! The workers simply generate and send points until they're told to stop by the administrator
                 live_point = settings%seed_point
                 do while(.true.)
-                    do i_repeat = 1,5
+                    do i_repeat = 1,settings%nprior_repeat
                         do i_dim=1,settings%nDims
                             i_grade = grade(i_dim)
                             nhat = 0d0
@@ -639,8 +657,12 @@ module generate_module
             if(settings%write_live) close(write_phys_unit)
 
             if(.not. allocated(RTI%num_repeats) ) allocate(RTI%num_repeats(size(settings%grade_dims)))
-            RTI%num_repeats(1) = settings%num_repeats
-            RTI%num_repeats(2:) = nint(settings%grade_frac(2:)/(settings%grade_frac(1)+0d0)*RTI%num_repeats(1)*speed(1)/speed(2:))
+            if (any(settings%grade_frac<=1)) then
+                RTI%num_repeats(1) = settings%num_repeats
+                RTI%num_repeats(2:) = nint(settings%grade_frac(2:)/(settings%grade_frac(1)+0d0)*RTI%num_repeats(1)*speed(1)/speed(2:))
+            else
+                RTI%num_repeats = int(settings%grade_frac)
+            end if
 
             ! Set the posterior thinning factor
             if(settings%boost_posterior<0d0) then

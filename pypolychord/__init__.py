@@ -1,35 +1,11 @@
 from .output import PolyChordOutput
 import sys
 import os
-from ctypes import CDLL, RTLD_GLOBAL
-
-# Preloading MPI
-try:
-    CDLL("libmpi.so", mode=RTLD_GLOBAL)
-except OSError:
-    print("WARNING: Could not preload libmpi.so."
-          "If you are running with MPI, this may cause segfaults")
-    pass
-
-err = 'libchord.so: cannot open shared object file: No such file or directory'
-try:
-    import _pypolychord
-except ImportError as e:
-    if str(e) == err:
-        print('PolyChord: Could not find libchord.so')
-        print('           Did you move/remove your polychord library?')
-        print('           Go back to your PolyChord directory and run: ')
-        print('')
-        print('           $  make')
-        print('           $  python setup.py install --user ')
-        print('')
-        sys.exit(1)
-    else:
-        raise e
+import _pypolychord
 
 
-def default_prior(cube, theta):
-    theta[:] = cube
+def default_prior(cube):
+    return cube.copy()
 
 
 def default_dumper(live, dead, logweights, logZ, logZerr):
@@ -114,10 +90,10 @@ def run_polychord(loglikelihood, nDims, nDerived, settings,
         ----------
         live: numpy.array
             The live points and their loglikelihood birth and death contours
-            Shape (nDims+nDerived+2,nlive)
+            Shape (nlive, nDims+nDerived+2)
         dead: numpy.array
             The dead points and their loglikelihood birth and death contours
-            Shape (nDims+nDerived+2,ndead)
+            Shape (ndead, nDims+nDerived+2)
         logweights: numpy.array
             The posterior weights of the dead points
             Shape (ndead)
@@ -176,11 +152,17 @@ def run_polychord(loglikelihood, nDims, nDerived, settings,
     except ImportError:
         rank = 0
 
-    if not os.path.exists(settings.base_dir) and rank == 0:
-        os.makedirs(settings.base_dir)
-
-    if not os.path.exists(settings.cluster_dir) and rank == 0:
-        os.makedirs(settings.cluster_dir)
+    try:
+        if rank == 0:
+            os.makedirs(settings.base_dir)
+    except OSError:
+        pass
+        
+    try:
+        if rank == 0:
+            os.makedirs(settings.cluster_dir)
+    except OSError:
+        pass
 
     def wrap_loglikelihood(theta, phi):
         logL, phi[:] = loglikelihood(theta)
@@ -215,6 +197,7 @@ def run_polychord(loglikelihood, nDims, nDerived, settings,
                      settings.write_live,
                      settings.write_dead,
                      settings.write_prior,
+                     settings.maximise,
                      settings.compression_factor,
                      settings.base_dir,
                      settings.file_root,

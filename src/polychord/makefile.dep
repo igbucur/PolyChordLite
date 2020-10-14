@@ -70,10 +70,20 @@ nested_sampling.o : \
 	clustering.o \
 	random_utils.o \
 	chordal_sampling.o \
+	maximiser.o \
 	run_time_info.o \
 	feedback.o \
 	read_write.o \
 	settings.o \
+	mpi_utils.o \
+	utils.o 
+
+maximiser.o : \
+	nelder_mead.o \
+	chordal_sampling.o \
+	run_time_info.o \
+	settings.o \
+	read_write.o \
 	mpi_utils.o \
 	utils.o 
 

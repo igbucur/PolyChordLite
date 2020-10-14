@@ -2,11 +2,20 @@ try:
     import getdist.mcsamples
 except ImportError:
     pass
+try:
+    import pandas as pd
+except ImportError:
+    pass
 import re
 import os
 import numpy as np
-import pandas as pd
 import collections
+
+try:
+    FileNotFoundError
+except NameError:
+    FileNotFoundError = IOError
+
 
 class PolyChordOutput:
     def __init__(self, base_dir, file_root):
@@ -80,15 +89,22 @@ class PolyChordOutput:
             except ValueError:
                 self.nlike = None
             line = f.readline()
-            self.avnlike = float(line.split()[1])
+            line = line.split()
+            i = line.index('(')
+            self.avnlike = [float(x) for x in line[1:i]]
+
             try:
-                self.avnlikeslice = float(line.split()[3])
-            except ValueError:
+                self.avnlikeslice = [float(x) for x in line[i+1:-3]]
+            except NameError:
                 self.avnlikeslice = None
 
         # build the stats table
-        self._create_pandas_table()
-                
+        try:
+            self._create_pandas_table()
+            self.pandas = True
+        except (NameError, FileNotFoundError, OSError):
+            self.pandas = False
+
     @property
     def root(self):
         return os.path.join(self.base_dir, self.file_root)
@@ -121,7 +137,11 @@ class PolyChordOutput:
         :returns: and array of log likelihood values
         :rtype: 
         """
-        return np.array(self._samples_table['loglike'])
+        if self.pandas:
+            return np.array(self._samples_table['loglike'])
+        else:
+            print("Install pandas for loglikes functionality")
+
 
     @property
     def samples(self):
@@ -130,8 +150,10 @@ class PolyChordOutput:
         :returns: 
         :rtype: 
         """
-        return self._samples_table
-
+        if self.pandas:
+            return self._samples_table
+        else:
+            print("Install pandas for samples functionality")
     
     def cluster_posterior(self, i):
         return getdist.mcsamples.loadMCSamples(self.cluster_root(i))
@@ -144,7 +166,8 @@ class PolyChordOutput:
         for i, _ in enumerate(self.logZs):
             self.make_paramnames_file(paramnames,
                                       self.cluster_paramnames_file(i))
-        self._create_pandas_table(paramnames = paramnames)
+        if self.pandas:
+            self._create_pandas_table(paramnames = paramnames)
             
             
     def make_paramnames_file(self, paramnames, filename):
@@ -155,7 +178,7 @@ class PolyChordOutput:
     def _create_pandas_table(self, paramnames = None):
         # build the paranames for the table
         initial_col_names = ['weight','loglike']
-        n_params = np.genfromtxt('%s_equal_weights.txt' % self.root).shape[1] - 2
+        n_params = np.atleast_2d(np.genfromtxt('%s_equal_weights.txt' % self.root)).shape[1] - 2
         if paramnames is None:
             for i in range(n_params):
                 initial_col_names.append('p%d'%i)
@@ -166,6 +189,8 @@ class PolyChordOutput:
         self._samples_table = pd.read_table('%s_equal_weights.txt' % self.root,sep=' ',
                                             skipinitialspace=1,
                                             names= initial_col_names)
+        # Temporary fix while https://github.com/pandas-dev/pandas/issues/10065 is solved
+        self._samples_table = self._samples_table.astype(float)
         # correct to loglike
         self._samples_table['loglike'] *= -0.5 
 
@@ -196,11 +221,14 @@ class PolyChordOutput:
         return lst
 
     def __str__(self):
-        string = "Global evidence:\n%s\n\n"\
-                 "Local evidences:\n%s\n\n"\
-                 "Run-time information:\n%s\n\n"\
-                 "Parameter estimates:\n%s"
-        return string % tuple(x.to_string() for x in self._dataframes_for_printing())
+        if self.pandas:
+            string = "Global evidence:\n%s\n\n"\
+                     "Local evidences:\n%s\n\n"\
+                     "Run-time information:\n%s\n\n"\
+                     "Parameter estimates:\n%s"
+            return string % tuple(x.to_string() for x in self._dataframes_for_printing())
+        else:
+            return self.root
 
     def __repr__(self):
         return self.__str__()

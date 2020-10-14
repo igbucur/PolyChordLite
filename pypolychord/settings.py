@@ -107,9 +107,14 @@ class PolyChordSettings:
         (Default: True)
         Write a dead points file.
 
-    write_dead : boolean
+    write_prior : boolean
         (Default: True)
         Write a prior points file.
+
+    maximise : boolean
+        (Default: False)
+        Perform maximisation at the end of the run to find the maximum
+        likelihood point and value
 
     compression_factor : double
         (Default: exp(-1))
@@ -124,11 +129,15 @@ class PolyChordSettings:
         Root name of the files produced.
 
     grade_frac : List[float]
-        (Default: 1)
-        The amount of time to spend in each speed.
+        (Default: [1])
+        The amount of time to spend in each speed. 
+        If any of grade_frac are <= 1, then polychord will time each sub-speed,
+        and then choose num_repeats for the number of slowest repeats, and
+        spend the proportion of time indicated by grade_frac. Otherwise this
+        indicates the number of repeats to spend in each speed.
 
     grade_dims : List[int]
-        (Default: 1)
+        (Default: nDims)
         The number of parameters within each speed.
 
     nlives : dict {double:int}
@@ -150,7 +159,7 @@ class PolyChordSettings:
         self.nlive = kwargs.pop('nlive', nDims*25)
         self.num_repeats = kwargs.pop('num_repeats', nDims*5)
         self.nprior = kwargs.pop('nprior', -1)
-        self.nfail = kwargs.pop('nprior', -1)
+        self.nfail = kwargs.pop('nfail', -1)
         self.do_clustering = kwargs.pop('do_clustering', True)
         self.feedback = kwargs.pop('feedback', 1)
         self.precision_criterion = kwargs.pop('precision_criterion', 0.001)
@@ -167,6 +176,7 @@ class PolyChordSettings:
         self.write_live = kwargs.pop('write_live', True)
         self.write_dead = kwargs.pop('write_dead', True)
         self.write_prior = kwargs.pop('write_prior', True)
+        self.maximise = kwargs.pop('maximise', False)
         self.compression_factor = kwargs.pop('compression_factor',
                                              numpy.exp(-1))
         self.base_dir = kwargs.pop('base_dir', 'chains')
