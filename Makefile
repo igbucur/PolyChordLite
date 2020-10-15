@@ -2,7 +2,7 @@
 EXAMPLES = gaussian pyramidal rastrigin twin_gaussian random_gaussian himmelblau rosenbrock eggbox half_gaussian fitting gaussian_shell gaussian_shells object_detection
 
 # Your likelihood programs
-PROGRAMS = polychord_MR polychord_fortran polychord_CC polychord_CC_ini
+PROGRAMS = polychord_fortran polychord_CC polychord_CC_ini
 
 # Directories
 SRC_DIR = $(PWD)/src
@@ -55,7 +55,7 @@ RM = rm -rf
 LDFLAGS += -L$(LIB_DIR)
 
 # Additional libraries
-LDLIBS += -larmadillo 
+# LDLIBS += -larmadillo -lstdc++
 
 # Export all of the necessary variables
 export CC CXX FC LD LDSHARED RM AR 
